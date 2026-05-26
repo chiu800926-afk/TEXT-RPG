@@ -227,7 +227,10 @@ if user_input := st.chat_input("輸入你的行動... (描述越具體越好)"):
         with st.spinner('法則運算中...'):
             try:
                 prompt = system_prompt + "\n【玩家最新行動】：" + user_input
-                response = model.generate_content(prompt)
+                response = model.generate_content(
+                    prompt,
+                    generation_config={"response_mime_type": "application/json"}
+                )
                 parsed_data = parse_ai_response(response.text)
                 
                 st.markdown(parsed_data.get("story_text", "系統無回應"))
