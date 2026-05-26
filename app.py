@@ -9,14 +9,30 @@ import streamlit.components.v1 as components
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
 
-# 自動偵測可用的模型 (防 404 報錯版)
+# ==========================================
+# 自動偵測高免費額度模型 (Gemma 專用版)
+# ==========================================
 if "model_name" not in st.session_state:
     try:
+        # 抓取目前 Google 伺服器上真正有開放的模型
         available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        flash_models = [m for m in available_models if 'flash' in m]
-        st.session_state.model_name = flash_models[0].replace("models/", "") if flash_models else "gemini-2.5-flash"
-    except Exception:
-        st.session_state.model_name = "gemini-2.5-flash"
+        
+        # 優先尋找名字裡有 gemma 的模型 (享有每日 1500 次額度)
+        gemma_models = [m for m in available_models if 'gemma' in m.lower()]
+        
+        if gemma_models:
+            # 自動選擇清單中的第一個 Gemma 模型
+            selected_model = gemma_models[0].replace("models/", "")
+        else:
+            # 萬一沒抓到，強制指定儀表板上的 Gemma 4 26B
+            selected_model = "gemma-4-26b"
+            
+        st.session_state.model_name = selected_model
+        print(f"🌟 [系統提示] 已成功切換至高額度模型：{st.session_state.model_name}")
+        
+    except Exception as e:
+        print(f"⚠️ 模型抓取失敗，強制使用預設值。錯誤：{e}")
+        st.session_state.model_name = "gemma-4-26b"
 
 model = genai.GenerativeModel(st.session_state.model_name)
 
