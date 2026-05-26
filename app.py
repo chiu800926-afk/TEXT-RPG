@@ -1,6 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 import json
+import re  # <--- 新增這一行，這是 Python 內建的強大文字搜尋工具
 import streamlit.components.v1 as components
 
 # ==========================================
@@ -89,8 +90,13 @@ if "messages" not in st.session_state:
 # 輔助函式：安全解析 AI JSON
 def parse_ai_response(response_text):
     try:
-        clean_text = response_text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_text)
+        # 使用正則表達式，暴力抓取第一個 '{' 到最後一個 '}' 之間的所有內容
+        match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if match:
+            clean_text = match.group(0)
+            return json.loads(clean_text)
+        else:
+            raise ValueError("找不到 JSON 括號")
     except Exception:
         return {
             "story_text": response_text + "\n\n*(系統警告：AI 思考迴路產生波動，未依格式輸出)*",
@@ -243,13 +249,10 @@ if user_input := st.chat_input("輸入你的行動... (描述越具體越好)"):
         with st.spinner('法則運算中...'):
             try:
                 prompt = system_prompt + "\n【玩家最新行動】：" + user_input
-                response = model.generate_content(
-                    prompt,
-                    generation_config={"response_mime_type": "application/json"}
-                )
-                parsed_data = parse_ai_response(response.text)
-                
-                st.markdown(parsed_data.get("story_text", "系統無回應"))
+            response = model.generate_content(prompt)
+            parsed_data = parse_ai_response(response.text)
+            
+            st.markdown(parsed_data.get("story_text", "系統無回應"))
                 if parsed_data.get("settlement_text"):
                     st.markdown(f'<div class="settlement-box"><b>⚙️ 系統結算：</b><br>{parsed_data["settlement_text"]}</div>', unsafe_allow_html=True)
                 
