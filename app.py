@@ -248,11 +248,17 @@ if user_input := st.chat_input("輸入你的行動... (描述越具體越好)"):
     with st.chat_message("assistant"):
         with st.spinner('法則運算中...'):
             try:
+                # 組合玩家指令
                 prompt = system_prompt + "\n【玩家最新行動】：" + user_input
-            response = model.generate_content(prompt)
-            parsed_data = parse_ai_response(response.text)
-            
-            st.markdown(parsed_data.get("story_text", "系統無回應"))
+                
+                # 單純的呼叫方式 (給 Gemma 用的)
+                response = model.generate_content(prompt)
+                
+                # 透過剛剛寫的正則表達式暴力解析 JSON
+                parsed_data = parse_ai_response(response.text)
+                
+                # 更新畫面與狀態
+                st.markdown(parsed_data.get("story_text", "系統無回應"))
                 if parsed_data.get("settlement_text"):
                     st.markdown(f'<div class="settlement-box"><b>⚙️ 系統結算：</b><br>{parsed_data["settlement_text"]}</div>', unsafe_allow_html=True)
                 
@@ -262,7 +268,9 @@ if user_input := st.chat_input("輸入你的行動... (描述越具體越好)"):
                     "content": parsed_data.get("story_text", ""),
                     "settlement": parsed_data.get("settlement_text", "")
                 })
+                
             except Exception as e:
+                # 護盾機制：如果解析失敗或 API 斷線，優雅地接住錯誤
                 error_msg = str(e)
                 if "429" in error_msg or "ResourceExhausted" in error_msg:
                     sys_reply = "🛑 **[系統提示] API 請求頻率限制 (Error 429)**\n\n由於目前連接的是免費版 AI 伺服器，您的動作太快已觸發流量保護機制。\n\n💡 **請注意：這並非遊戲內的謎題或懲罰。**請暫停操作，等待約 1 分鐘後再重新送出您的指令即可繼續遊玩。"
@@ -274,5 +282,6 @@ if user_input := st.chat_input("輸入你的行動... (描述越具體越好)"):
                     "content": sys_reply,
                     "settlement": "🛑 系統中斷：狀態未變更"
                 })
-            
+                
+    # 確保 st.rerun() 跟 with st.chat_message 對齊
     st.rerun()
