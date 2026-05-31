@@ -11,9 +11,9 @@ import streamlit.components.v1 as components
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 client = Groq(api_key=GROQ_API_KEY)
 
-# 強制鎖定 Llama-3-70B 旗艦模型 (邏輯強、速度快)
+# 強制鎖定最新版 Llama-3.3-70B 旗艦模型 (邏輯更強、速度極快)
 if "model_name" not in st.session_state:
-    st.session_state.model_name = "llama3-70b-8192"
+    st.session_state.model_name = "llama-3.3-70b-versatile"
     print(f"🌟 [系統提示] 已成功載入阿卡夏底層大腦：{st.session_state.model_name}")
 
 # ==========================================
