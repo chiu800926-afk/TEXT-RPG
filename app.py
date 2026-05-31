@@ -1,41 +1,20 @@
 import streamlit as st
-import google.generativeai as genai
+from groq import Groq
 import json
-import re  # <--- 新增這一行，這是 Python 內建的強大文字搜尋工具
+import re
 import streamlit.components.v1 as components
 
 # ==========================================
-# 系統設定 (本地測試版)
+# 系統設定 (Groq Llama-3 高速推理引擎)
 # ==========================================
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-genai.configure(api_key=GEMINI_API_KEY)
+# 從 Streamlit Secrets 讀取 Groq 金鑰
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+client = Groq(api_key=GROQ_API_KEY)
 
-# ==========================================
-# 自動偵測高免費額度模型 (Gemma 專用版)
-# ==========================================
+# 強制鎖定 Llama-3-70B 旗艦模型 (邏輯強、速度快)
 if "model_name" not in st.session_state:
-    try:
-        # 抓取目前 Google 伺服器上真正有開放的模型
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # 優先尋找名字裡有 gemma 的模型 (享有每日 1500 次額度)
-        gemma_models = [m for m in available_models if 'gemma' in m.lower()]
-        
-        if gemma_models:
-            # 自動選擇清單中的第一個 Gemma 模型
-            selected_model = gemma_models[0].replace("models/", "")
-        else:
-            # 萬一沒抓到，強制指定儀表板上的 Gemma 4 26B
-            selected_model = "gemma-4-26b"
-            
-        st.session_state.model_name = selected_model
-        print(f"🌟 [系統提示] 已成功切換至高額度模型：{st.session_state.model_name}")
-        
-    except Exception as e:
-        print(f"⚠️ 模型抓取失敗，強制使用預設值。錯誤：{e}")
-        st.session_state.model_name = "gemma-4-26b"
-
-model = genai.GenerativeModel(st.session_state.model_name)
+    st.session_state.model_name = "llama3-70b-8192"
+    print(f"🌟 [系統提示] 已成功載入阿卡夏底層大腦：{st.session_state.model_name}")
 
 # ==========================================
 # 📚 劇本資料庫 (新增劇本都在這裡設定)
@@ -248,14 +227,28 @@ if user_input := st.chat_input("輸入你的行動... (描述越具體越好)"):
     with st.chat_message("assistant"):
         with st.spinner('法則運算中...'):
             try:
-                # 組合玩家指令
-                prompt = system_prompt + "\n【玩家最新行動】：" + user_input
+                # 呼叫 Groq API (支援原生 JSON 鎖定)
+                chat_completion = client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": system_prompt
+                        },
+                        {
+                            "role": "user",
+                            "content": "【玩家最新行動】：" + user_input
+                        }
+                    ],
+                    model=st.session_state.model_name,
+                    temperature=0.6,
+                    response_format={"type": "json_object"} 
+                )
                 
-                # 單純的呼叫方式 (給 Gemma 用的)
-                response = model.generate_content(prompt)
+                # 提取 Groq 的回覆文字
+                response_text = chat_completion.choices[0].message.content
                 
-                # 透過剛剛寫的正則表達式暴力解析 JSON
-                parsed_data = parse_ai_response(response.text)
+                # 解析 JSON (保留正則表達式作為雙重保險)
+                parsed_data = parse_ai_response(response_text)
                 
                 # 更新畫面與狀態
                 st.markdown(parsed_data.get("story_text", "系統無回應"))
@@ -270,9 +263,9 @@ if user_input := st.chat_input("輸入你的行動... (描述越具體越好)"):
                 })
                 
             except Exception as e:
-                # 護盾機制：如果解析失敗或 API 斷線，優雅地接住錯誤
+                # 攔截錯誤
                 error_msg = str(e)
-                if "429" in error_msg or "ResourceExhausted" in error_msg:
+                if "429" in error_msg or "rate limit" in error_msg.lower():
                     sys_reply = "🛑 **[系統提示] API 請求頻率限制 (Error 429)**\n\n由於目前連接的是免費版 AI 伺服器，您的動作太快已觸發流量保護機制。\n\n💡 **請注意：這並非遊戲內的謎題或懲罰。**請暫停操作，等待約 1 分鐘後再重新送出您的指令即可繼續遊玩。"
                 else:
                     sys_reply = f"⚠️ **[系統報錯] 伺服器異常**\n\n遊戲引擎發生未知錯誤，這與您的遊玩決策無關。請稍後再試。({error_msg})"
@@ -283,5 +276,4 @@ if user_input := st.chat_input("輸入你的行動... (描述越具體越好)"):
                     "settlement": "🛑 系統中斷：狀態未變更"
                 })
                 
-    # 確保 st.rerun() 跟 with st.chat_message 對齊
     st.rerun()
